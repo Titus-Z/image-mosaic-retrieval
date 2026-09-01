@@ -1,0 +1,12 @@
+.DS_Store
+__pycache__/
+.pytest_cache/
+.venv/
+.env
+*.pyc
+*.pkl
+*.zip
+data/
+demo_output/
+outputs/
+models/

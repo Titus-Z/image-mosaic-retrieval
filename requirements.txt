@@ -1,0 +1,10 @@
+numpy>=1.26,<3
+Pillow>=10,<12
+tqdm>=4.66,<5
+opencv-python-headless>=4.9,<5
+torch>=2.2,<3
+torchvision>=0.17,<1
+faiss-cpu>=1.8,<2
+scikit-image>=0.22,<1
+scikit-learn>=1.4,<2
+lpips>=0.1.4,<1
