@@ -12,36 +12,31 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
-import cv2
-import torch
-import faiss
-
-from torchvision import models, transforms
-from torchvision.models import VGG16_Weights
-
 from skimage.feature import hog
 from skimage.color import rgb2hsv
-from sklearn.preprocessing import normalize
-from sklearn.cluster import MiniBatchKMeans
-from sklearn.metrics.pairwise import cosine_similarity
-
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-transform_cnn = transforms.Compose([
-    transforms.Resize((64, 64)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                         std =[0.229, 0.224, 0.225])
-])
 
 
 @lru_cache(maxsize=1)
-def get_vgg16_feature_extractor() -> torch.nn.Module:
-    """Load the pretrained feature extractor only when CNN features are used."""
+def get_cnn_runtime() -> tuple[object, object, object, object]:
+    """Load PyTorch, transforms, and VGG16 only when CNN features are used."""
 
+    import torch
+    from torchvision import models, transforms
+    from torchvision.models import VGG16_Weights
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    transform = transforms.Compose(
+        [
+            transforms.Resize((64, 64)),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            ),
+        ]
+    )
     model = models.vgg16(weights=VGG16_Weights.IMAGENET1K_V1).features[:4]
-    return model.to(device).eval()
+    return torch, device, transform, model.to(device).eval()
 
 
 def normalize_rows(matrix: np.ndarray) -> np.ndarray:
@@ -109,12 +104,13 @@ def extract_cnn_feature(image_path: str) -> Tuple[str, np.ndarray]:
     """
     Extract low-dimensional CNN feature using shallow VGG16 + Global Average Pooling
     """
+    torch, device, transform, model = get_cnn_runtime()
     image_id = os.path.basename(image_path)
     image = Image.open(image_path).convert('RGB')
-    x = transform_cnn(image).unsqueeze(0).to(device)
+    x = transform(image).unsqueeze(0).to(device)
 
     with torch.no_grad():
-        feat = get_vgg16_feature_extractor()(x)  # shape: (1, C, H, W)
+        feat = model(x)  # shape: (1, C, H, W)
         pooled = torch.nn.functional.adaptive_avg_pool2d(feat, (1, 1))  # → shape: (1, C, 1, 1)
         vector = pooled.view(-1).cpu().numpy().astype(np.float32)  # → shape: (C,)
 
@@ -123,6 +119,8 @@ def extract_cnn_feature(image_path: str) -> Tuple[str, np.ndarray]:
 
 
 def extract_edge_density_feature(image_path: str) -> Tuple[str, np.ndarray]:
+    import cv2
+
     image_id = os.path.basename(image_path)
     image = Image.open(image_path).convert('L').resize((64, 64))
     img_array = np.array(image)
@@ -148,34 +146,34 @@ def extract_combined_feature(
 
     if w_rgb > 0:
         _, rgb = extract_avg_rgb_feature(image_path)
-        rgb_norm = normalize(rgb.reshape(1, -1))[0] * w_rgb
+        rgb_norm = normalize_rows(rgb.reshape(1, -1))[0] * w_rgb
         feature_parts.append(rgb_norm)
 
     if w_color > 0:
         _, color = extract_color_hist_feature(image_path)
-        color_norm = normalize(color.reshape(1, -1))[0] * w_color
+        color_norm = normalize_rows(color.reshape(1, -1))[0] * w_color
         feature_parts.append(color_norm)
 
     if w_hog > 0:
         _, hog_feat = extract_hog_feature(image_path)
-        hog_norm = normalize(hog_feat.reshape(1, -1))[0] * w_hog
+        hog_norm = normalize_rows(hog_feat.reshape(1, -1))[0] * w_hog
         feature_parts.append(hog_norm)
 
     if w_cnn > 0:
         _, cnn_feat = extract_cnn_feature(image_path)
-        cnn_norm = normalize(cnn_feat.reshape(1, -1))[0] * w_cnn
+        cnn_norm = normalize_rows(cnn_feat.reshape(1, -1))[0] * w_cnn
         feature_parts.append(cnn_norm)
 
     if w_edge > 0:
         _, edge_feat = extract_edge_density_feature(image_path)
-        edge_norm = normalize(edge_feat.reshape(1, -1))[0] * w_edge
+        edge_norm = normalize_rows(edge_feat.reshape(1, -1))[0] * w_edge
         feature_parts.append(edge_norm)
 
     if not feature_parts:
         raise ValueError("At least one feature weight must be greater than 0.")
 
     combined = np.concatenate(feature_parts)
-    final_feature = normalize(combined.reshape(1, -1))[0]
+    final_feature = normalize_rows(combined.reshape(1, -1))[0]
     return image_id, final_feature
 
 
@@ -280,6 +278,9 @@ def match_tiles_to_gallery_kmeans(
     """
     Match tiles to gallery images using KMeans clustering.
     """
+    from sklearn.cluster import MiniBatchKMeans
+    from sklearn.metrics.pairwise import cosine_similarity
+
     tile_features = load_feature_mapping(tile_feature_path)
     gallery_features = load_feature_mapping(gallery_feature_path)
 
@@ -345,6 +346,8 @@ def match_tiles_to_gallery_faiss(
     """
     Match tiles to gallery images using FAISS (cosine similarity, efficient for large-scale retrieval).
     """
+    import faiss
+
     tile_features = load_feature_mapping(tile_feature_path)
     gallery_features = load_feature_mapping(gallery_feature_path)
 

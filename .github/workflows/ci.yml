@@ -16,3 +16,4 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m compileall -q .
       - run: pytest -q
+      - run: python demo.py --output-dir /tmp/image-mosaic-demo

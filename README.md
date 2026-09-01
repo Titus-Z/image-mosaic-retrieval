@@ -1,9 +1,13 @@
 # Image Mosaic Retrieval
 
+[![CI](https://github.com/Titus-Z/image-mosaic-retrieval/actions/workflows/ci.yml/badge.svg)](https://github.com/Titus-Z/image-mosaic-retrieval/actions/workflows/ci.yml)
+
 A modular computer-vision pipeline that reconstructs a target image from a
 gallery of small images. It combines handcrafted and shallow CNN features,
 FAISS or KMeans retrieval, mosaic reconstruction, quantitative evaluation, and
 feature-weight search.
+
+![Synthetic target, generated gallery, and retrieved mosaic](docs/assets/demo-comparison.png)
 
 ## What this demonstrates
 

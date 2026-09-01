@@ -54,6 +54,47 @@ def create_demo_assets(output_dir: Path) -> tuple[Path, Path]:
     return target_path, gallery_dir
 
 
+def create_comparison_image(
+    target_path: Path,
+    gallery_dir: Path,
+    mosaic_path: Path,
+    output_path: Path,
+) -> None:
+    """Create one README-ready target, gallery, and mosaic comparison."""
+
+    panel_size = 192
+    label_height = 34
+    gap = 18
+    canvas = Image.new(
+        "RGB",
+        (panel_size * 3 + gap * 4, panel_size + label_height + gap * 2),
+        "white",
+    )
+    draw = ImageDraw.Draw(canvas)
+    labels = ["Synthetic target", "Generated gallery", "Retrieved mosaic"]
+
+    target = Image.open(target_path).convert("RGB").resize((panel_size, panel_size))
+    mosaic = Image.open(mosaic_path).convert("RGB").resize((panel_size, panel_size))
+    gallery_panel = Image.new("RGB", (panel_size, panel_size), "white")
+    gallery_images = [
+        Image.open(path).convert("RGB").resize((panel_size // 2, panel_size // 2))
+        for path in sorted(gallery_dir.glob("*.png"))
+    ]
+    for index, gallery_image in enumerate(gallery_images[:4]):
+        x = (index % 2) * (panel_size // 2)
+        y = (index // 2) * (panel_size // 2)
+        gallery_panel.paste(gallery_image, (x, y))
+
+    for index, (label, image) in enumerate(
+        zip(labels, [target, gallery_panel, mosaic])
+    ):
+        x = gap + index * (panel_size + gap)
+        draw.text((x, gap), label, fill=(20, 28, 45))
+        canvas.paste(image, (x, gap + label_height))
+
+    canvas.save(output_path)
+
+
 def run_demo(output_dir: Path) -> Path:
     """Run the full RGB-feature retrieval pipeline and return the mosaic path."""
 
@@ -68,6 +109,12 @@ def run_demo(output_dir: Path) -> Path:
     extract_tile_features(str(target_path), TILE_SIZE, "avg_rgb", str(tile_features))
     match_tiles_to_gallery_faiss(str(tile_features), str(gallery_features), str(matches))
     reconstruct_mosaic_image(str(matches), str(gallery_dir), TILE_SIZE, str(mosaic))
+    create_comparison_image(
+        target_path,
+        gallery_dir,
+        mosaic,
+        output_dir / "comparison.png",
+    )
     return mosaic
 
 
